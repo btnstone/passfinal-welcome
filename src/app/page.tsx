@@ -28,7 +28,7 @@ const Page: React.FC = () => {
   const [showContent, setShowContent] = useState(false)
   const [showConfetti, setShowConfetti] = useState(false)
 
-  const fullText = "欢迎来到订单查询系统"
+  const fullText = "嗨！别来无恙！"
   const typingSpeed = 100 // 打字速度（毫秒）
 
   useEffect(() => {
@@ -63,7 +63,7 @@ const Page: React.FC = () => {
   return (
     <div className="flex flex-col items-center justify-center h-screen bg-gray-100">
       <div className="text-center">
-        <h1 className="text-4xl font-bold mb-4">
+        <h1 className="text-4xl font-bold mb-4 ">
           {typingEffect}
           <span className="animate-blink">|</span>
         </h1>
@@ -72,14 +72,14 @@ const Page: React.FC = () => {
             showContent ? "opacity-100" : "opacity-0"
           }`}
         >
-          <p className="mb-4">输入订单号来查询订单信息</p>
+          <p className="mb-4 m-5">感谢你的一路支持，小破站即将重构完成！<br></br>截至2023年11月6日前，曾经在爱发电赞助过任意金额的朋友们<br></br>都可以获得优先内测资格和铁杆支持者待遇！</p>
           <div>
             <input
               type="text"
               value={outTradeNo}
               onChange={(e) => setOutTradeNo(e.target.value)}
-              className="border-2 border-gray-300 p-2 mr-2"
-              placeholder="输入订单号"
+              className="border-2 border-gray-300 p-2 mr-2 w-80"
+              placeholder="输入爱发电订单号"
             />
             <button
               onClick={queryOrder}
