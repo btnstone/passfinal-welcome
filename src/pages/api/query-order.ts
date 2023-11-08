@@ -1,8 +1,7 @@
-// pages/api/query-order.ts
-
 import type { NextApiRequest, NextApiResponse } from 'next';
 import axios from 'axios';
 import crypto from 'crypto';
+import { OrderResponse, UserResponse } from '@/types/api';
 
 // 帮助函数来创建签名
 function createSignature(token: string, userId: string, params: string, ts: number): string {
@@ -10,10 +9,26 @@ function createSignature(token: string, userId: string, params: string, ts: numb
   return crypto.createHash('md5').update(rawString).digest('hex');
 }
 
+// 泛型请求函数
+async function requestAfdianApi<T>(endpoint: string, userId: string, token: string, paramsData: any): Promise<T> {
+  const ts = Math.floor(Date.now() / 1000);
+  const params = JSON.stringify(paramsData);
+  const sign = createSignature(token, userId, params, ts);
+
+  const response = await axios.post<T>('https://afdian.net/api/open' + endpoint, {
+    user_id: userId,
+    ts,
+    params,
+    sign,
+  });
+
+  return response.data;
+}
+
 // API路由的处理函数
 export default async function handler(
   req: NextApiRequest,
-  res: NextApiResponse<any>
+  res: NextApiResponse
 ) {
   // 从环境变量获取userId和token
   const userId = process.env.USER_ID;
@@ -32,41 +47,49 @@ export default async function handler(
     return res.status(400).json({ message: '订单信息不正确。' });
   }
 
-  // 构建请求
-  const ts = Math.floor(Date.now() / 1000);
-  const params = JSON.stringify({ out_trade_no: outTradeNo });
-
-  // 创建签名
-  const sign = createSignature(token, userId, params, ts);
-
-  // 发送请求到爱发电API
   try {
-    const afdianResponse = await axios.post('https://afdian.net/api/open/query-order', {
-      user_id: userId,
-      ts,
-      params,
-      sign,
-    });
+    // 查询订单
+    const orderResponse = await requestAfdianApi<OrderResponse>('/query-order', userId, token, { out_trade_no: outTradeNo });
 
-    // 检查返回数据中是否有订单列表
-    if (afdianResponse.data.ec === 200 && afdianResponse.data.data.list.length > 0) {
-      // 提取所需的数据
-      const orderData = afdianResponse.data.data.list[0]; // 假设我们只关心第一个订单
-      const responseData = {
-        message: `恭喜，你曾经在${new Date(orderData.create_time * 1000).toLocaleString()}发电了${orderData.plan_title}。`,
-        orderDetails: {
-          orderNumber: orderData.out_trade_no,
-          createTime: new Date(orderData.create_time * 1000).toLocaleString(),
-          planTitle: orderData.plan_title,
-          totalAmount: orderData.total_amount,
-          status: orderData.status,
-        },
-      };
+    if (orderResponse.ec === 200 && orderResponse.data.list.length > 0) {
+      const orderDetails = orderResponse.data.list[0];
 
-      // 发送处理后的数据回前端
-      res.status(200).json(responseData);
+      // 查询用户
+      const userResponse = await requestAfdianApi<UserResponse>('/query-sponsor', userId, token, { user_id: orderDetails.user_id });
+
+      if (userResponse.ec === 200 && userResponse.data.list.length > 0) {
+        const user = userResponse.data.list.find(u => u.user.user_id === orderDetails.user_id);
+        
+        if (user) {
+          // 构造响应数据
+          const userDetails = {
+            name: user.user.name || '未知用户',
+            avatar: user.user.avatar || '默认头像',
+            // ... 其他用户信息
+          };
+
+          const orderInfo = {
+            orderNumber: orderDetails.out_trade_no,
+            createTime: new Date(orderDetails.create_time * 1000).toLocaleString(),
+            planTitle: orderDetails.plan_title,
+            totalAmount: orderDetails.total_amount,
+            status: orderDetails.status,
+            // ... 其他订单信息
+          };
+
+          res.status(200).json({
+            message: `订单和用户信息获取成功`,
+            userDetails,
+            orderInfo,
+          });
+          console.log(userDetails, orderInfo)
+        } else {
+          res.status(404).json({ message: "没有找到用户信息。" });
+        }
+      } else {
+        res.status(404).json({ message: "没有找到用户信息。" });
+      }
     } else {
-      // 如果没有订单，返回提示信息
       res.status(404).json({ message: "没有找到订单信息。" });
     }
   } catch (error) {
@@ -74,6 +97,7 @@ export default async function handler(
     if (axios.isAxiosError(error) && error.response) {
       res.status(error.response.status).json(error.response.data);
     } else {
+      console.error(error);
       res.status(500).json({ message: 'Internal Server Error' });
     }
   }
