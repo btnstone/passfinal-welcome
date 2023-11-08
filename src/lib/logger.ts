@@ -24,6 +24,6 @@ export async function logQuery({ outTradeNo, userId, userName, ipAddress }: LogE
   } catch (error) {
     console.error('Error logging query:', error);
     // 处理或传播错误
-    // throw error; // 如果你想让调用者知道错误发生了
+    throw error; // 如果你想让调用者知道错误发生了
   }
 }
