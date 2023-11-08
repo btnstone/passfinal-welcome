@@ -1,104 +1,73 @@
+// pages/api/query-order.ts
 import type { NextApiRequest, NextApiResponse } from 'next';
-import axios from 'axios';
-import crypto from 'crypto';
-import { OrderResponse, UserResponse } from '@/types/api';
+import { requestAfdianApi } from '@/utils/afdianApi'; // 确保路径正确
+import { OrderResponse, UserResponse } from '@/types/api'; // 确保路径正确
 
-// 帮助函数来创建签名
-function createSignature(token: string, userId: string, params: string, ts: number): string {
-  const rawString = `${token}params${params}ts${ts}user_id${userId}`;
-  return crypto.createHash('md5').update(rawString).digest('hex');
-}
-
-// 泛型请求函数
-async function requestAfdianApi<T>(endpoint: string, userId: string, token: string, paramsData: any): Promise<T> {
-  const ts = Math.floor(Date.now() / 1000);
-  const params = JSON.stringify(paramsData);
-  const sign = createSignature(token, userId, params, ts);
-
-  const response = await axios.post<T>('https://afdian.net/api/open' + endpoint, {
-    user_id: userId,
-    ts,
-    params,
-    sign,
-  });
-
-  return response.data;
-}
-
-// API路由的处理函数
-export default async function handler(
-  req: NextApiRequest,
-  res: NextApiResponse
-) {
-  // 从环境变量获取userId和token
-  const userId = process.env.USER_ID;
-  const token = process.env.TOKEN;
-
-  // 确保环境变量存在
-  if (!userId || !token) {
-    return res.status(500).json({ message: '服务器配置错误。' });
-  }
-
-  // 获取订单号
-  const { outTradeNo } = req.body;
-
-  // 检查订单号是否为27位
-  if (!outTradeNo || outTradeNo.length !== 27) {
-    return res.status(400).json({ message: '订单信息不正确。' });
-  }
-
+async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
-    // 查询订单
-    const orderResponse = await requestAfdianApi<OrderResponse>('/query-order', userId, token, { out_trade_no: outTradeNo });
+    // 解构请求体中的订单号
+    const { outTradeNo } = req.body;
 
-    if (orderResponse.ec === 200 && orderResponse.data.list.length > 0) {
-      const orderDetails = orderResponse.data.list[0];
-
-      // 查询用户
-      const userResponse = await requestAfdianApi<UserResponse>('/query-sponsor', userId, token, { user_id: orderDetails.user_id });
-
-      if (userResponse.ec === 200 && userResponse.data.list.length > 0) {
-        const user = userResponse.data.list.find(u => u.user.user_id === orderDetails.user_id);
-        
-        if (user) {
-          // 构造响应数据
-          const userDetails = {
-            name: user.user.name || '未知用户',
-            avatar: user.user.avatar || '默认头像',
-            // ... 其他用户信息
-          };
-
-          const orderInfo = {
-            orderNumber: orderDetails.out_trade_no,
-            createTime: new Date(orderDetails.create_time * 1000).toLocaleString(),
-            planTitle: orderDetails.plan_title,
-            totalAmount: orderDetails.total_amount,
-            status: orderDetails.status,
-            // ... 其他订单信息
-          };
-
-          res.status(200).json({
-            message: `订单和用户信息获取成功`,
-            userDetails,
-            orderInfo,
-          });
-          console.log(userDetails, orderInfo)
-        } else {
-          res.status(404).json({ message: "没有找到用户信息。" });
-        }
-      } else {
-        res.status(404).json({ message: "没有找到用户信息。" });
-      }
-    } else {
-      res.status(404).json({ message: "没有找到订单信息。" });
+    // 检查订单号是否有效
+    if (!outTradeNo || outTradeNo.length !== 27) {
+      return res.status(400).json({ message: '订单信息不正确。' });
     }
+
+    // 查询订单信息
+    const orderParams = { out_trade_no: outTradeNo };
+    const orderResponse = await requestAfdianApi<OrderResponse>('https://afdian.net/api/open/query-order', orderParams);
+
+    // 验证订单查询结果
+    if (orderResponse.data.list.length === 0) {
+      return res.status(404).json({ message: "没有找到订单信息。" });
+    }
+    const orderData = orderResponse.data.list[0];
+
+    // 查询用户信息
+    const userParams = { user_id: orderData.user_id };
+    const userResponse = await requestAfdianApi<UserResponse>('https://afdian.net/api/open/query-sponsor', userParams);
+
+    // 验证用户查询结果
+    if (userResponse.data.list.length === 0) {
+      return res.status(404).json({ message: "没有找到用户信息。" });
+    }
+    const userData = userResponse.data.list.find(u => u.user.user_id === orderData.user_id);
+
+    if (!userData) {
+      return res.status(404).json({ message: "用户信息不匹配。" });
+    }
+
+    // 组装返回的用户和订单详情
+    const userDetails = {
+      name: userData.user.name || '未知用户',
+      avatar: userData.user.avatar || '默认头像',
+      // ...其他用户信息
+    };
+
+    const orderDetails = {
+      orderNumber: orderData.out_trade_no,
+      createTime: new Date(orderData.create_time * 1000).toLocaleString(),
+      planTitle: orderData.plan_title,
+      totalAmount: orderData.total_amount,
+      status: orderData.status,
+      // ...其他订单信息
+    };
+
+    // 返回成功响应
+    res.status(200).json({
+      message: `订单查询成功。`,
+      orderDetails,
+      userDetails,
+    });
+    
   } catch (error) {
-    // 处理错误
-    if (axios.isAxiosError(error) && error.response) {
-      res.status(error.response.status).json(error.response.data);
+    // 统一错误处理
+    if (error instanceof Error) {
+      res.status(500).json({ message: error.message });
     } else {
-      console.error(error);
-      res.status(500).json({ message: 'Internal Server Error' });
+      res.status(500).json({ message: '未知服务器错误' });
     }
   }
 }
+
+export default handler;

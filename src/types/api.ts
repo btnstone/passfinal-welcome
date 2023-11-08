@@ -1,4 +1,8 @@
 // types/api.ts
+export interface BaseResponse {
+  ec: number;
+  em: string;
+}
 
 export interface OrderResponse {
     ec: number;
