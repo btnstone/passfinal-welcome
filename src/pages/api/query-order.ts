@@ -56,7 +56,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     const orderDetails = {
       orderNumber: orderData.out_trade_no,
       userId: orderData.user_id,
-      createTime: new Date(orderData.create_time * 1000).toLocaleString(),
+      createTime: new Date(orderData.create_time * 1000).toISOString(), // 将时间转换为 ISO 格式
       planTitle: orderData.plan_title,
       totalAmount: orderData.total_amount,
       status: orderData.status,
@@ -76,9 +76,12 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     // 调用 logQuery 函数记录日志
     await logQuery({
       outTradeNo: orderDetails.orderNumber, // 替换为你的实际变量
+      avatar: userDetails.avatar, // 替换为你的实际变量
       userId: orderDetails.userId, // 替换为你的实际变量
       userName: userDetails.name, // 替换为你的实际变量
       ipAddress: ipAddress as string,
+      createTime: orderDetails.createTime,
+
     })
   } catch (error) {
     // 统一错误处理
