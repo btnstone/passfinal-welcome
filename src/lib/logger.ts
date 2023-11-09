@@ -20,6 +20,8 @@ export async function logQuery({
   createTime,
 }: LogEntry): Promise<void> {
   try {
+    console.log("Logging query...")
+    console.log("DATABASE_URL:", process.env.DATABASE_URL);
     await prisma.queryLog.create({
       data: {
         outTradeNo,
